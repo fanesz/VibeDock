@@ -8,6 +8,8 @@ just to get terminals and project tooling.
 
 > Windows desktop app · Tauri 2 + React 19 · dark-first, keyboard-friendly.
 
+<img width="1378" height="877" alt="image" src="https://github.com/user-attachments/assets/19037c99-9f9e-4a1b-afe9-20155a228537" />
+
 ---
 
 ## Features
