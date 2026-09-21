@@ -5,10 +5,32 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VibeDock</title>
+    <style>
+      /* Dark background from the first paint so there's no white flash before
+         React (and Tailwind) load. #root's placeholder is replaced on mount. */
+      html, body { margin: 0; background: #18181b; }
+      #app-splash {
+        position: fixed; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 16px;
+        background: #18181b; color: #71717a;
+        font-family: system-ui, sans-serif; font-size: 13px;
+      }
+      #app-splash .spin {
+        width: 28px; height: 28px; border-radius: 50%;
+        border: 3px solid #27272a; border-top-color: #38bdf8;
+        animation: app-spin 0.7s linear infinite;
+      }
+      @keyframes app-spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-splash">
+        <div class="spin"></div>
+        <div>Loading VibeDock…</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
