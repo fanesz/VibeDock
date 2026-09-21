@@ -1,55 +1,118 @@
-# Tauri React Base Template
+# VibeDock
 
-Base Tauri 2 + React 19 + TypeScript project aligned with the main frontend patterns.
+**A developer command center for AI-assisted workflows.** One window to manage
+all your projects — each with real interactive terminals, one-click launch
+commands, a graphical Git manager, first-class Claude Code launch/resume, live
+subscription-usage limits, and a per-project notepad. Stop opening a full IDE
+just to get terminals and project tooling.
 
-## Stack
+> Windows desktop app · Tauri 2 + React 19 · dark-first, keyboard-friendly.
 
-- Tauri 2, Vite 7, React 19, TypeScript.
-- Tailwind CSS 4 via `@tailwindcss/vite`.
-- React Router 7 for route structure.
-- SWR for server state, cache, query revalidation, and remote mutations.
-- Zustand for local/client-only state.
-- Axios for API services.
-- Sonner for toast notifications.
+---
 
-## Commands
+## Features
 
-- `bun run dev`: start Vite on the Tauri dev port.
-- `bun run tauri dev`: start the Tauri desktop app.
-- `bun run build`: run TypeScript and Vite build.
-- `bun run lint`: run ESLint.
-- `bun run format`: run Prettier.
+- **Multi-project workspace** — open any number of folders in one window; switch
+  between them without tearing down running terminals. Drag to reorder; recents
+  and layout persist across restarts.
+- **Real terminals** — multiple PTY-backed terminals per project (ConPTY), full
+  ANSI/color, `Ctrl+C`, resize, and interactive TUIs (`claude`, `vim`, …). Split
+  into a resizable grid, tab between groups, drag to rearrange. Restart a hung
+  dev server (whole process tree) in one click.
+- **Custom commands & command sets** — save per-project or global launch commands;
+  a *command set* opens one terminal per command at once (e.g. backend + frontend
+  + db). Launch straight from the top bar.
+- **Git manager** — GitHub-Desktop-style: repo picker for child repos, Changes /
+  History tabs, checkbox staging, pure diff pane, branch create/switch/merge, and
+  a single smart Sync button (pull → push → fetch).
+- **Claude Code, first-class** — launch a new session, continue the last, or
+  resume any prior session from a history list — all in a real terminal. Optional
+  `--dangerously-skip-permissions` toggle.
+- **Live usage limits** — a status-bar indicator shows your Claude subscription's
+  **5-hour** and **weekly** limits as percentages, with a hover card for reset
+  countdowns. Reads the same usage endpoint Claude Code's `/usage` uses.
+- **Quick file open** — `Ctrl+P` fuzzy finder with read-only, syntax-highlighted
+  preview (respects `.gitignore`; never walks `node_modules`, `.git`, `dist`, …).
+- **Per-project notepad** — a scratch pad with a line-number gutter and VS Code-style
+  line editing shortcuts.
+- **Tools** — kill a stuck port, open the project in VS Code / Explorer, and more.
 
-## Main Paths
+## Keyboard shortcuts
 
-- `src/App.tsx`: app routes and base layout.
-- `src/pages/*`: route pages.
-- `src/common/components/*`: shared UI.
-- `src/common/hooks/*`: shared hooks.
-- `src/common/utils/*`: utilities.
-- `src/common/types/index.ts`: shared types.
-- `src/stores/*`: SWR feature modules and shared API utilities.
-- `src-tauri/*`: Rust/Tauri app shell.
+| Shortcut | Action |
+|---|---|
+| `Ctrl+P` | Quick file open |
+| `` Ctrl+` `` | New terminal in the active project |
+| `Ctrl+/` | Notepad: toggle `//` comment on line(s) |
+| `Alt+↑ / ↓` | Notepad: move line(s) |
+| `Alt+Shift+↑ / ↓` | Notepad: duplicate line(s) |
 
-## API Queries
+## Requirements
 
-Use SWR feature hooks for server state. Auth is the reference implementation.
+- **Windows 10/11** (initial target platform).
+- [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
+  (preinstalled on current Windows).
+- Optional integrations, detected at runtime: **Git**, the **`claude`** CLI,
+  **VS Code** (`code` on `PATH`).
 
-```tsx
-import { useAuth } from "@stores/auth";
+## Install
 
-export default function ProfileStatus() {
-  const { user, isLoading, error, refreshUser } = useAuth();
+Prebuilt installers are published on the [Releases](../../releases) page. Download
+the latest `.msi` / `.exe`, run it, and launch VibeDock.
 
-  if (isLoading) return <div>Loading...</div>;
-  if (error) return <button onClick={() => refreshUser()}>Retry</button>;
+## Build from source
 
-  return <div>{user ? user.email : "Signed out"}</div>;
-}
+Prerequisites:
+
+- [Bun](https://bun.sh)
+- [Rust](https://rustup.rs) (stable, MSVC toolchain)
+- Tauri's Windows prerequisites (MSVC Build Tools + WebView2) —
+  see the [Tauri guide](https://tauri.app/start/prerequisites/).
+
+```bash
+bun install
+
+# Run the desktop app in dev (HMR for the frontend)
+bun run tauri dev
+
+# Produce an installer in src-tauri/target/release/bundle/
+bun run tauri build
 ```
 
-Feature modules should keep request keys, services, and SWR hooks together under `src/stores/{feature}`.
+Quality checks:
 
-## Recommended IDE Setup
+```bash
+bun run build     # tsc + vite
+bun run lint      # eslint
+cargo check --manifest-path src-tauri/Cargo.toml
+```
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+> Any change under `src-tauri/` (Rust, `tauri.conf.json`, capabilities) needs a
+> full `tauri dev` restart — frontend HMR won't pick it up.
+
+## Tech stack
+
+- **Frontend:** React 19 · TypeScript · Vite 7 · Tailwind 4 · Zustand (persisted
+  to `localStorage`) · SWR · xterm.js · react-resizable-panels · highlight.js.
+- **Backend:** Rust / Tauri 2 — `portable-pty` (ConPTY), `git2` + git CLI, the
+  `ignore` crate for file walks, `reqwest` for the usage endpoint.
+- No HTTP server: the frontend talks to Rust via `invoke()` + events.
+
+## Data & privacy
+
+VibeDock is a local-only tool. Workspace state (projects, terminals, commands,
+notepad) is stored in `localStorage`. The usage-limits indicator reads your
+existing Claude OAuth token from `~/.claude/.credentials.json` to call
+Anthropic's usage endpoint — nothing is sent anywhere else, and no telemetry is
+collected.
+
+## Known limitations
+
+- Windows only for now (the architecture keeps most logic portable).
+- Git network ops use the git CLI (reusing your credential helpers); merge
+  conflicts are surfaced but there's no in-app 3-way merge editor.
+- Not a code editor — no LSP, debugger, or in-app editing (by design).
+
+## License
+
+_No license chosen yet — add a `LICENSE` file before public release._
