@@ -41,7 +41,8 @@ pub fn run() {
             git::git_push,
             git::git_pull,
             git::git_fetch,
-            claude::claude_sessions
+            claude::claude_sessions,
+            claude::claude_limits
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

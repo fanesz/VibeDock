@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { CommandSet, CustomCommand, Project, ShellKind } from "@types";
+import type { CustomCommand, Project } from "@types";
 import { toast } from "sonner";
 import useSWR from "swr";
-import { sendToTerminal } from "@components/TerminalView/engine";
-import { useTerminals } from "@stores/terminals";
+import SettingsModal from "@components/SettingsModal";
 import { useUI } from "@stores/ui";
 import { useWorkspace } from "@stores/workspace";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { runCommand, runSet } from "@utils/actions";
 import { cn } from "@utils/cn";
 import {
   VscChromeClose,
@@ -28,8 +28,8 @@ type Session = { id: string; label: string; mtime: number };
 
 export default function TitleBar() {
   const [maxed, setMaxed] = useState(false);
-  const [killPortOpen, setKillPortOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const modal = useUI((s) => s.modal);
+  const setModal = useUI((s) => s.setModal);
   const project = useWorkspace((s) => (s.activeProjectId ? s.projects[s.activeProjectId] : null));
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function TitleBar() {
           {(close) => (
             <MenuItem
               onClick={() => {
-                setKillPortOpen(true);
+                setModal("killPort");
                 close();
               }}
             >
@@ -61,7 +61,7 @@ export default function TitleBar() {
         </Menu>
 
         <Menu label="Claude Code" icon={<VscHubot size={12} />} width="w-56">
-          {(close) => <ClaudeMenu project={project} onHistory={() => setHistoryOpen(true)} close={close} />}
+          {(close) => <ClaudeMenu project={project} onHistory={() => setModal("history")} close={close} />}
         </Menu>
 
         <Menu label="Commands" icon={<VscListSelection size={12} />} width="w-64">
@@ -87,53 +87,13 @@ export default function TitleBar() {
         </WinBtn>
       </div>
 
-      {killPortOpen && <KillPortModal onClose={() => setKillPortOpen(false)} />}
-      {historyOpen && project && (
-        <HistoryModal project={project} onClose={() => setHistoryOpen(false)} />
+      {modal === "killPort" && <KillPortModal onClose={() => setModal(null)} />}
+      {modal === "history" && project && (
+        <HistoryModal project={project} onClose={() => setModal(null)} />
       )}
+      {modal === "settings" && <SettingsModal onClose={() => setModal(null)} />}
     </div>
   );
-}
-
-// --- Launch helpers (the top bar has no view of its own; it acts on the active project) ---
-
-// The focused terminal's id IF it's live and idle (at a prompt, no running
-// process) — so a command can reuse it instead of opening a new tab. Returns
-// null when it's dormant/exited or busy (claude, bun run dev, …).
-async function idleFocusedId(project: Project): Promise<string | null> {
-  const ts = useTerminals.getState();
-  const fid = ts.focusedByProject[project.id];
-  const f = fid ? ts.terminals[fid] : null;
-  if (!fid || !f || f.status === "exited" || !ts.started[fid]) return null;
-  try {
-    return (await invoke<boolean>("pty_is_idle", { id: fid })) ? fid : null;
-  } catch {
-    return null;
-  }
-}
-
-// Run a command, reusing the focused terminal if it's idle — else a fresh tab.
-async function runCommand(project: Project, command: string, shell?: ShellKind) {
-  const reuse = await idleFocusedId(project);
-  if (!(reuse && sendToTerminal(reuse, command))) {
-    useTerminals.getState().addTerminal(project.id, project.path, { shell, command });
-  }
-  useUI.getState().setView("terminals");
-}
-
-// A set opens one terminal per command; the first reuses an idle focused
-// terminal (so no blank tab), the rest open fresh.
-async function runSet(project: Project, s: CommandSet) {
-  const cmds = s.commands.map((c) => c.trim()).filter(Boolean);
-  if (cmds.length === 0) return;
-  const ts = useTerminals.getState();
-  const reuse = await idleFocusedId(project);
-  let start = 0;
-  if (reuse && sendToTerminal(reuse, cmds[0])) start = 1;
-  for (let i = start; i < cmds.length; i++) {
-    ts.addTerminal(project.id, project.path, { shell: s.shell, command: cmds[i] });
-  }
-  useUI.getState().setView("terminals");
 }
 
 function ClaudeMenu({

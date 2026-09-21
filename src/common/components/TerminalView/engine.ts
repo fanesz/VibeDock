@@ -33,6 +33,23 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(container);
+
+  const id = tab.id;
+
+  // Ctrl+Enter / Shift+Enter → insert newline instead of submit. xterm sends
+  // plain `\r` for both (no ctrl/shift handling on Enter), so Claude Code submits.
+  // Send meta+Enter (ESC CR), which Claude Code reads as "insert newline".
+  // preventDefault is REQUIRED: returning false alone doesn't stop the browser
+  // inserting a newline into xterm's hidden <textarea>, which it then forwards as
+  // a second keystroke → a submit. (That's why Shift+Enter misbehaved but not Ctrl.)
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type === "keydown" && e.key === "Enter" && (e.ctrlKey || e.shiftKey)) {
+      e.preventDefault();
+      void invoke("pty_write", { id, data: "\x1b\r" });
+      return false; // suppress xterm's default `\r`
+    }
+    return true;
+  });
   // Only fit if the pane is actually laid out. On a hidden pane (a set opens
   // several tabs; only one is visible) the element measures 0 and FitAddon clamps
   // to a 2x1 PTY — which garbles the shell. xterm's 80x24 default is valid until
@@ -40,7 +57,6 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
   if (container.offsetParent !== null) fit.fit();
 
   const engine: Engine = { term, fit, alive: true, cleanup: () => {} };
-  const id = tab.id;
 
   // Auto-title: sniff the command line the user types at a shell prompt. Gated on
   // the NORMAL buffer so a full-screen TUI (Claude Code, vim) never pollutes it.

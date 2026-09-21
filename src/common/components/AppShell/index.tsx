@@ -9,9 +9,10 @@ import QuickOpen from "@components/QuickOpen";
 import StatusBar from "@components/StatusBar";
 import TerminalsLayer from "@components/TerminalsLayer";
 import TitleBar from "@components/TitleBar";
-import { useTerminals } from "@stores/terminals";
+import { useSettings } from "@stores/settings";
 import { useUI } from "@stores/ui";
 import { useWorkspace } from "@stores/workspace";
+import { eventCombo, isCapturing, runAction, type ActionId } from "@utils/actions";
 import { cn } from "@utils/cn";
 
 export default function AppShell() {
@@ -21,26 +22,23 @@ export default function AppShell() {
   const activeView = useUI((s) => s.activeView);
   const quickOpen = useUI((s) => s.quickOpen);
 
-  // Global Ctrl+P opens quick file search.
+  // Global keyboard shortcuts (configurable in Settings). Capture phase +
+  // stopPropagation so a bound combo is consumed here and the focused terminal
+  // never also processes it. Stands down while the settings recorder is capturing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        useUI.getState().setQuickOpen(!useUI.getState().quickOpen);
-      }
-      // Ctrl+` → new terminal in the active project
-      if (e.ctrlKey && e.key === "`") {
-        e.preventDefault();
-        const ws = useWorkspace.getState();
-        const p = ws.activeProjectId ? ws.projects[ws.activeProjectId] : null;
-        if (p) {
-          useTerminals.getState().addTerminal(p.id, p.path);
-          useUI.getState().setView("terminals");
-        }
-      }
+      if (isCapturing()) return;
+      const combo = eventCombo(e);
+      if (!combo) return;
+      const shortcuts = useSettings.getState().shortcuts;
+      const hit = (Object.keys(shortcuts) as ActionId[]).find((id) => shortcuts[id] === combo);
+      if (!hit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      runAction(hit);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
   return (
