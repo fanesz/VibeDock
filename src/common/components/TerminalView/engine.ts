@@ -36,6 +36,18 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
 
   const id = tab.id;
 
+  // Clipboard helpers. The Tauri/WebView2 default context menu and xterm's own
+  // browser-paste don't work reliably here, so we drive the clipboard directly.
+  const copySelection = () => {
+    if (!term.hasSelection()) return false;
+    void navigator.clipboard.writeText(term.getSelection());
+    return true;
+  };
+  const paste = () => {
+    // term.paste() routes through onData → pty_write (and honors bracketed-paste).
+    void navigator.clipboard.readText().then((t) => t && term.paste(t)).catch(() => {});
+  };
+
   // Ctrl+Enter / Shift+Enter → insert newline instead of submit. xterm sends
   // plain `\r` for both (no ctrl/shift handling on Enter), so Claude Code submits.
   // Send meta+Enter (ESC CR), which Claude Code reads as "insert newline".
@@ -48,15 +60,38 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
       void invoke("pty_write", { id, data: "\x1b\r" });
       return false; // suppress xterm's default `\r`
     }
+    if (e.type !== "keydown") return true;
+    const k = e.key.toLowerCase();
     // VS Code-style Ctrl+C: copy when text is selected, else fall through so the
     // shell still gets SIGINT (Ctrl+C with no selection interrupts as normal).
-    if (e.type === "keydown" && e.ctrlKey && !e.shiftKey && !e.altKey && e.key === "c" && term.hasSelection()) {
-      void navigator.clipboard.writeText(term.getSelection());
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && k === "c" && term.hasSelection()) {
+      copySelection();
+      e.preventDefault();
+      return false;
+    }
+    // Paste: Ctrl+V, Ctrl+Shift+V, or Shift+Insert.
+    if (
+      ((e.ctrlKey && !e.altKey && k === "v") || (e.shiftKey && !e.ctrlKey && e.key === "Insert"))
+    ) {
+      e.preventDefault();
+      paste();
+      return false;
+    }
+    // Ctrl+Shift+C → copy (doesn't clash with SIGINT, so it always copies).
+    if (e.ctrlKey && e.shiftKey && !e.altKey && k === "c" && copySelection()) {
       e.preventDefault();
       return false;
     }
     return true;
   });
+
+  // Right-click: copy the selection if there is one, else paste (conhost style).
+  const onContextMenu = (e: MouseEvent) => {
+    e.preventDefault();
+    if (copySelection()) term.clearSelection();
+    else paste();
+  };
+  term.element?.addEventListener("contextmenu", onContextMenu);
   // Only fit if the pane is actually laid out. On a hidden pane (a set opens
   // several tabs; only one is visible) the element measures 0 and FitAddon clamps
   // to a 2x1 PTY — which garbles the shell. xterm's 80x24 default is valid until
@@ -144,6 +179,7 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
   engine.cleanup = () => {
     void outP.then((f) => f());
     void exitP.then((f) => f());
+    term.element?.removeEventListener("contextmenu", onContextMenu);
     unregister();
   };
   return engine;
