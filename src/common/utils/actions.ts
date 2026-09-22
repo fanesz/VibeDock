@@ -3,7 +3,7 @@
 // shortcut handler dispatch through one place.
 import type { CommandSet, Project, ShellKind } from "@types";
 import { sendToTerminal } from "@components/TerminalView/engine";
-import { useTerminals } from "@stores/terminals";
+import { leafIds, useTerminals } from "@stores/terminals";
 import { useUI } from "@stores/ui";
 import { useWorkspace } from "@stores/workspace";
 import { invoke } from "@tauri-apps/api/core";
@@ -57,13 +57,28 @@ export type ActionId =
   | "claude.new"
   | "claude.continue"
   | "claude.history"
-  | "tools.killPort";
+  | "tools.killPort"
+  | "project.prev"
+  | "project.next"
+  | `tab.${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
+
+// Ctrl+1..9 → focus the Nth terminal tab of the active project. Generated so
+// each is an ordinary, individually-rebindable action like the rest.
+const TAB_ACTIONS = Array.from({ length: 9 }, (_, i) => ({
+  id: `tab.${i + 1}` as ActionId,
+  label: `Switch to tab ${i + 1}`,
+  group: "Tabs",
+  defaultKey: `Ctrl+Digit${i + 1}`,
+}));
 
 // `defaultKey` uses the same serialized form as eventCombo() below (KeyboardEvent.code).
 export const ACTIONS: { id: ActionId; label: string; group: string; defaultKey: string }[] = [
   { id: "quickOpen", label: "Quick open file", group: "General", defaultKey: "Ctrl+KeyP" },
   { id: "settings.open", label: "Open settings", group: "General", defaultKey: "Ctrl+Comma" },
+  { id: "project.prev", label: "Previous project", group: "Projects", defaultKey: "Ctrl+PageUp" },
+  { id: "project.next", label: "Next project", group: "Projects", defaultKey: "Ctrl+PageDown" },
   { id: "terminal.new", label: "New terminal", group: "Terminal", defaultKey: "Ctrl+Backquote" },
+  ...TAB_ACTIONS,
   { id: "claude.new", label: "Claude: New session", group: "Claude Code", defaultKey: "Ctrl+Shift+KeyN" },
   { id: "claude.continue", label: "Claude: Continue last session", group: "Claude Code", defaultKey: "Ctrl+Shift+KeyO" },
   { id: "claude.history", label: "Claude: Show history", group: "Claude Code", defaultKey: "Ctrl+Shift+KeyY" },
@@ -79,6 +94,26 @@ function claudeCmd(base: string): string {
   return useWorkspace.getState().claudeSkipPermissions ? `${base} --dangerously-skip-permissions` : base;
 }
 
+// Move focus to the prev/next open project, wrapping around.
+function cycleProject(delta: number): void {
+  const ws = useWorkspace.getState();
+  const ids = ws.openProjectIds;
+  if (ids.length < 2) return;
+  const cur = ws.activeProjectId ? ids.indexOf(ws.activeProjectId) : -1;
+  ws.activateProject(ids[(cur + delta + ids.length) % ids.length]);
+}
+
+// Focus the terminal tab (pane group) at `index` in the active project — the
+// group holding the focused terminal is the one shown (see ProjectTerminals).
+function switchTab(project: Project, index: number): void {
+  const ts = useTerminals.getState();
+  const g = (ts.groupsByProject[project.id] ?? [])[index];
+  const first = g ? leafIds(g)[0] : undefined;
+  if (!first) return;
+  ts.focusTerminal(project.id, first);
+  useUI.getState().setView("terminals");
+}
+
 export function runAction(id: ActionId): void {
   const ui = useUI.getState();
   switch (id) {
@@ -91,10 +126,20 @@ export function runAction(id: ActionId): void {
     case "tools.killPort":
       ui.setModal("killPort");
       return;
+    case "project.prev":
+      cycleProject(-1);
+      return;
+    case "project.next":
+      cycleProject(1);
+      return;
   }
   // Project-scoped actions below.
   const p = activeProject();
   if (!p) return;
+  if (id.startsWith("tab.")) {
+    switchTab(p, Number(id.slice(4)) - 1);
+    return;
+  }
   switch (id) {
     case "terminal.new":
       useTerminals.getState().addTerminal(p.id, p.path);
@@ -142,6 +187,8 @@ export function prettyCombo(combo: string): string {
         .replace("Slash", "/")
         .replace("Minus", "-")
         .replace("Equal", "=")
+        .replace("PageUp", "PgUp")
+        .replace("PageDown", "PgDn")
         .replace("Space", "Space")
     )
     .join("+");
