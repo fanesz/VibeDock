@@ -103,14 +103,15 @@ function cycleProject(delta: number): void {
   ws.activateProject(ids[(cur + delta + ids.length) % ids.length]);
 }
 
-// Focus the terminal tab (pane group) at `index` in the active project — the
-// group holding the focused terminal is the one shown (see ProjectTerminals).
+// Focus the Nth terminal chip in tab-bar order — split panes count individually
+// (a [1,2] group is two chips), so this flattens groups to leaves (see
+// ProjectTerminals' chip render). Focusing a leaf reveals its group.
 function switchTab(project: Project, index: number): void {
   const ts = useTerminals.getState();
-  const g = (ts.groupsByProject[project.id] ?? [])[index];
-  const first = g ? leafIds(g)[0] : undefined;
-  if (!first) return;
-  ts.focusTerminal(project.id, first);
+  const groups = ts.groupsByProject[project.id] ?? [];
+  const id = groups.flatMap(leafIds)[index];
+  if (!id) return;
+  ts.focusTerminal(project.id, id);
   useUI.getState().setView("terminals");
 }
 
