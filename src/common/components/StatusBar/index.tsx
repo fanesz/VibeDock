@@ -70,10 +70,15 @@ function resetLabel(iso: string | null): string {
 }
 
 function ClaudeLimits() {
-  const { data, error } = useSWR<Limits>("claude_limits", () => invoke<Limits>("claude_limits"), {
+  const { data } = useSWR<Limits>("claude_limits", () => invoke<Limits>("claude_limits"), {
     refreshInterval: 60_000,
+    keepPreviousData: true,
   });
-  if (error || !data) return null; // stay quiet when signed out / offline
+  // Hide only until the FIRST successful load. A later transient failure (10s
+  // timeout, brief 5xx, network blip, token momentarily expired) leaves `data`
+  // intact — we keep showing the last-known values instead of blanking for a
+  // minute. SWR retries in the background and refreshes when it recovers.
+  if (!data) return null;
 
   const { five_hour: f, seven_day: w } = data;
   const worst = Math.max(f.utilization, w.utilization);

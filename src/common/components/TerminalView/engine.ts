@@ -48,6 +48,13 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
       void invoke("pty_write", { id, data: "\x1b\r" });
       return false; // suppress xterm's default `\r`
     }
+    // VS Code-style Ctrl+C: copy when text is selected, else fall through so the
+    // shell still gets SIGINT (Ctrl+C with no selection interrupts as normal).
+    if (e.type === "keydown" && e.ctrlKey && !e.shiftKey && !e.altKey && e.key === "c" && term.hasSelection()) {
+      void navigator.clipboard.writeText(term.getSelection());
+      e.preventDefault();
+      return false;
+    }
     return true;
   });
   // Only fit if the pane is actually laid out. On a hidden pane (a set opens
