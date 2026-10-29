@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TerminalTab } from "@stores/terminals";
 import { cn } from "@utils/cn";
-import { acquireEngine, fitEngine, releaseEngine } from "./engine";
+import { acquireEngine, fitEngine, registerSearchOpener, releaseEngine } from "./engine";
+import TerminalSearch from "./TerminalSearch";
 
 // Thin wrapper: the xterm instance + PTY live in the engine registry (engine.ts)
 // so they survive remounts. This component only owns the container div and asks
@@ -16,6 +17,11 @@ export default function TerminalView({
   focused: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    return registerSearchOpener(term.id, () => setSearchOpen(true));
+  }, [term.id]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -49,11 +55,14 @@ export default function TerminalView({
   return (
     <div
       className={cn(
-        "h-full w-full bg-[#09090b] p-1.5",
+        "relative h-full w-full bg-[#09090b] p-1.5 overflow-hidden",
         focused ? "ring-1 ring-inset ring-sky-700/60" : "ring-1 ring-inset ring-transparent"
       )}
     >
-      <div ref={containerRef} className="h-full w-full" />
+      {searchOpen && (
+        <TerminalSearch termId={term.id} onClose={() => setSearchOpen(false)} />
+      )}
+      <div ref={containerRef} className="h-full w-full overflow-hidden" />
     </div>
   );
 }

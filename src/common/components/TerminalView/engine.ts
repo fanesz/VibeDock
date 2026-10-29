@@ -6,14 +6,16 @@ import { enqueuePty, registerRestarter, useTerminals, type TerminalTab } from "@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 
 const delay = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
-type Engine = { term: Terminal; fit: FitAddon; alive: boolean; cleanup: () => void };
+type Engine = { term: Terminal; fit: FitAddon; search: SearchAddon; alive: boolean; cleanup: () => void };
 
 const engines = new Map<string, Engine>();
+const searchOpeners = new Map<string, () => void>();
 // A release (React unmount) schedules disposal; a re-acquire within the grace
 // window cancels it. That's what distinguishes a remount (split/tab switch —
 // keep alive) from a real close/project-close (no remount — dispose).
@@ -32,6 +34,8 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
+  const search = new SearchAddon();
+  term.loadAddon(search);
   term.open(container);
 
   const id = tab.id;
@@ -82,6 +86,12 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
       e.preventDefault();
       return false;
     }
+    // Ctrl+F → find in terminal buffer
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && k === "f") {
+      e.preventDefault();
+      openTerminalSearch(id);
+      return false;
+    }
     return true;
   });
 
@@ -98,7 +108,7 @@ function createEngine(container: HTMLDivElement, tab: TerminalTab): Engine {
   // the visible-effect refit runs when the tab is shown.
   if (container.offsetParent !== null) fit.fit();
 
-  const engine: Engine = { term, fit, alive: true, cleanup: () => {} };
+  const engine: Engine = { term, fit, search, alive: true, cleanup: () => {} };
 
   // Auto-title: sniff the command line the user types at a shell prompt. Gated on
   // the NORMAL buffer so a full-screen TUI (Claude Code, vim) never pollutes it.
@@ -237,10 +247,41 @@ export function sendToTerminal(id: string, command: string): boolean {
   return true;
 }
 
+// Clear the terminal display & scrollback buffer without sending "cls" or "clear"
+// to the shell process.
+export function clearTerminal(id: string): boolean {
+  const e = engines.get(id);
+  if (!e || !e.alive) return false;
+  e.term.clear();
+  e.term.focus();
+  return true;
+}
+
 export function fitEngine(id: string, focus = false): void {
   const e = engines.get(id);
   if (!e || !e.term.element || e.term.element.offsetParent === null) return; // hidden → dims are 0
   e.fit.fit();
   void invoke("pty_resize", { id, cols: e.term.cols, rows: e.term.rows });
   if (focus) e.term.focus();
+}
+
+export function registerSearchOpener(id: string, fn: () => void): () => void {
+  searchOpeners.set(id, fn);
+  return () => searchOpeners.delete(id);
+}
+
+export function openTerminalSearch(id: string): void {
+  searchOpeners.get(id)?.();
+}
+
+export function getSearchAddon(id: string): SearchAddon | undefined {
+  return engines.get(id)?.search;
+}
+
+export function clearTerminalSearch(id: string): void {
+  engines.get(id)?.search.clearDecorations();
+}
+
+export function focusTerminal(id: string): void {
+  engines.get(id)?.term.focus();
 }

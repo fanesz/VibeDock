@@ -1,6 +1,7 @@
 import type { CommandSet, CustomCommand, Project } from "@types";
 import { toast } from "sonner";
 import { create } from "zustand";
+import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { persist } from "zustand/middleware";
 
@@ -21,6 +22,8 @@ type WorkspaceState = {
   setClaudeSkipPermissions: (v: boolean) => void;
 
   openProjectDialog: () => Promise<void>; // pick a folder, create-or-open it
+  openFolder: (path: string) => Promise<void>; // open a specific folder path
+  openFolders: (paths: string[]) => Promise<void>; // open multiple folder paths
   reopenProject: (id: string) => void; // open a known/recent project by id
   activateProject: (id: string) => void;
   closeProject: (id: string) => void; // keep in history, drop from open
@@ -80,6 +83,36 @@ export const useWorkspace = create<WorkspaceState>()(
             activeProjectId: id,
           };
         });
+      },
+
+      openFolder: async (rawPath: string) => {
+        try {
+          const folder = await invoke<string>("resolve_project_folder", { path: rawPath });
+          const id = folder;
+          set((s) => {
+            const now = Date.now();
+            const existing = s.projects[id];
+            const project: Project = existing
+              ? { ...existing, customCommands: existing.customCommands ?? [], lastOpenedAt: now }
+              : { id, name: basename(id), path: id, addedAt: now, lastOpenedAt: now, customCommands: [] };
+            return {
+              projects: { ...s.projects, [id]: project },
+              openProjectIds: s.openProjectIds.includes(id)
+                ? s.openProjectIds
+                : [...s.openProjectIds, id],
+              activeProjectId: id,
+            };
+          });
+          toast.success(`Opened project ${basename(folder)}`);
+        } catch (e) {
+          toast.error(`Could not open project: ${e}`);
+        }
+      },
+
+      openFolders: async (rawPaths: string[]) => {
+        for (const rawPath of rawPaths) {
+          await get().openFolder(rawPath);
+        }
       },
 
       reopenProject: (id) => {

@@ -2,7 +2,7 @@
 // to live inline in TitleBar; they're here now so both the menus AND the global
 // shortcut handler dispatch through one place.
 import type { CommandSet, Project, ShellKind } from "@types";
-import { sendToTerminal } from "@components/TerminalView/engine";
+import { clearTerminal, openTerminalSearch, sendToTerminal } from "@components/TerminalView/engine";
 import { leafIds, useTerminals } from "@stores/terminals";
 import { useUI } from "@stores/ui";
 import { useWorkspace } from "@stores/workspace";
@@ -54,6 +54,8 @@ export type ActionId =
   | "quickOpen"
   | "settings.open"
   | "terminal.new"
+  | "terminal.clear"
+  | "terminal.find"
   | "claude.new"
   | "claude.continue"
   | "claude.history"
@@ -78,6 +80,8 @@ export const ACTIONS: { id: ActionId; label: string; group: string; defaultKey: 
   { id: "project.prev", label: "Previous project", group: "Projects", defaultKey: "Ctrl+PageUp" },
   { id: "project.next", label: "Next project", group: "Projects", defaultKey: "Ctrl+PageDown" },
   { id: "terminal.new", label: "New terminal", group: "Terminal", defaultKey: "Ctrl+Backquote" },
+  { id: "terminal.clear", label: "Clear terminal", group: "Terminal", defaultKey: "Ctrl+KeyK" },
+  { id: "terminal.find", label: "Find in terminal", group: "Terminal", defaultKey: "Ctrl+KeyF" },
   ...TAB_ACTIONS,
   { id: "claude.new", label: "Claude: New session", group: "Claude Code", defaultKey: "Ctrl+Shift+KeyN" },
   { id: "claude.continue", label: "Claude: Continue last session", group: "Claude Code", defaultKey: "Ctrl+Shift+KeyO" },
@@ -146,6 +150,16 @@ export function runAction(id: ActionId): void {
       useTerminals.getState().addTerminal(p.id, p.path);
       ui.setView("terminals");
       return;
+    case "terminal.clear": {
+      const fid = useTerminals.getState().focusedByProject[p.id];
+      if (fid) clearTerminal(fid);
+      return;
+    }
+    case "terminal.find": {
+      const fid = useTerminals.getState().focusedByProject[p.id];
+      if (fid) openTerminalSearch(fid);
+      return;
+    }
     case "claude.new":
       void runCommand(p, claudeCmd("claude"));
       return;

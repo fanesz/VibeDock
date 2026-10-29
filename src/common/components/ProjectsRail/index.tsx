@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Project } from "@types";
 import { toast } from "sonner";
+import { usePointerReorder } from "@hooks/usePointerReorder";
 import { deriveRecents, useWorkspace } from "@stores/workspace";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@utils/cn";
@@ -39,9 +40,11 @@ export default function ProjectsRail() {
   );
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [ctx, setCtx] = useState<Ctx | null>(null);
+
+  const { dragIndex, dragOverIndex, handlePointerDown } = usePointerReorder((from, to) => {
+    moveProject(from, to);
+  });
 
   const openCtx = (e: React.MouseEvent, project: Project, recent: boolean) => {
     e.preventDefault();
@@ -64,7 +67,7 @@ export default function ProjectsRail() {
       <div className="min-h-0 flex-1 overflow-y-auto px-2">
         {openProjects.length === 0 && recents.length === 0 && (
           <p className="px-2 py-6 text-xs leading-relaxed text-zinc-600">
-            No projects yet. Click the folder icon above to open one.
+            No projects yet. Drag &amp; drop a folder here or click the folder icon above.
           </p>
         )}
 
@@ -73,32 +76,17 @@ export default function ProjectsRail() {
           return (
             <div
               key={p.id}
-              draggable={renamingId !== p.id}
-              onDragStart={(e) => {
-                setDragIndex(i);
-                e.dataTransfer.effectAllowed = "move";
-              }}
-              onDragEnd={() => {
-                setDragIndex(null);
-                setDragOverIndex(null);
-              }}
-              onDragOver={(e) => {
-                if (dragIndex === null) return;
-                e.preventDefault();
-                setDragOverIndex(i);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragIndex !== null) moveProject(dragIndex, i);
-                setDragIndex(null);
-                setDragOverIndex(null);
+              data-reorder-index={i}
+              onPointerDown={(e) => {
+                if (renamingId !== p.id) handlePointerDown(i, e);
               }}
               onClick={() => activateProject(p.id)}
               onContextMenu={(e) => openCtx(e, p, false)}
               className={cn(
-                "group flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm",
+                "group flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm select-none",
                 active ? "bg-zinc-800 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900",
-                dragOverIndex === i && dragIndex !== i && "ring-1 ring-sky-500"
+                dragOverIndex === i && dragIndex !== null && dragIndex !== i && "ring-1 ring-sky-500",
+                dragIndex === i && "opacity-60"
               )}
             >
               {active ? (

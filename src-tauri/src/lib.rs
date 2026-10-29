@@ -24,6 +24,7 @@ pub fn run() {
             tools::open_in_vscode,
             tools::open_in_explorer,
             tools::reveal_in_explorer,
+            tools::resolve_project_folder,
             tools::kill_port,
             git::git_repos,
             git::git_status,

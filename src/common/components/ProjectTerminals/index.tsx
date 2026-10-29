@@ -3,6 +3,8 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import type { ShellKind } from "@types";
 import useSWR from "swr";
 import TerminalView from "@components/TerminalView";
+import { clearTerminal, openTerminalSearch } from "@components/TerminalView/engine";
+import { usePointerReorder } from "@hooks/usePointerReorder";
 import type { PaneNode } from "@stores/terminals";
 import { leafIds, runRestart, useTerminals } from "@stores/terminals";
 import { invoke } from "@tauri-apps/api/core";
@@ -10,9 +12,11 @@ import { cn } from "@utils/cn";
 import {
   VscAdd,
   VscChevronDown,
+  VscClearAll,
   VscClose,
   VscDebugRestart,
   VscDebugStart,
+  VscSearch,
   VscSplitHorizontal,
   VscSplitVertical,
 } from "react-icons/vsc";
@@ -53,8 +57,9 @@ export default function ProjectTerminals({
   const moveGroup = useTerminals((s) => s.moveGroup);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const { dragIndex, dragOverIndex, handlePointerDown } = usePointerReorder((from, to) => {
+    moveGroup(projectId, from, to);
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const autoCreated = useRef(false);
@@ -90,7 +95,7 @@ export default function ProjectTerminals({
       const term = terminals[node.id];
       if (!term) return null;
       return (
-        <div className="h-full w-full" onMouseDownCapture={() => focusTerminal(projectId, node.id)}>
+        <div className="h-full w-full overflow-hidden" onMouseDownCapture={() => focusTerminal(projectId, node.id)}>
           {started[node.id] ? (
             <TerminalView term={term} visible={active && groupVisible} focused={focused === node.id} />
           ) : (
@@ -183,50 +188,60 @@ export default function ProjectTerminals({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-1.5">
-        {groups.map((g, gi) => {
-          const members = leafIds(g).map((id) => terminals[id]).filter(Boolean);
-          if (members.length === 0) return null;
-          const isSplit = members.length > 1;
-          const renamingHere = members.some((t) => t.id === renamingId);
-          return (
-            <div
-              key={g.id}
-              draggable={!renamingHere}
-              onDragStart={(e) => {
-                setDragIndex(gi);
-                e.dataTransfer.effectAllowed = "move";
-              }}
-              onDragEnd={() => {
-                setDragIndex(null);
-                setDragOverIndex(null);
-              }}
-              onDragOver={(e) => {
-                if (dragIndex === null) return;
-                e.preventDefault();
-                setDragOverIndex(gi);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragIndex !== null) moveGroup(projectId, dragIndex, gi);
-                setDragIndex(null);
-                setDragOverIndex(null);
-              }}
-              title={isSplit ? "Split group — drag to reorder" : "Drag to reorder"}
-              className={cn(
-                "flex h-7 shrink-0 items-center gap-0.5 rounded-md",
-                !renamingHere && "cursor-grab active:cursor-grabbing",
-                // A split group sits on a shared track so it reads as one unit.
-                isSplit && "bg-zinc-800/60 px-1",
-                dragOverIndex === gi && dragIndex !== gi && "ring-1 ring-sky-500"
-              )}
-            >
-              {members.map((t) => renderChip(t))}
-            </div>
-          );
-        })}
+      <div className="flex h-9 shrink-0 items-center border-b border-zinc-800 bg-zinc-950 px-1.5">
+        <div
+          className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden"
+          onWheel={(e) => {
+            if (e.deltaY !== 0 && e.deltaX === 0) {
+              e.currentTarget.scrollLeft += e.deltaY;
+            }
+          }}
+        >
+          {groups.map((g, gi) => {
+            const members = leafIds(g).map((id) => terminals[id]).filter(Boolean);
+            if (members.length === 0) return null;
+            const isSplit = members.length > 1;
+            const renamingHere = members.some((t) => t.id === renamingId);
+            return (
+              <div
+                key={g.id}
+                data-reorder-index={gi}
+                onPointerDown={(e) => {
+                  if (!renamingHere) handlePointerDown(gi, e);
+                }}
+                title={isSplit ? "Split group — drag to reorder" : "Drag to reorder"}
+                className={cn(
+                  "flex h-7 shrink-0 items-center gap-0.5 rounded-md select-none",
+                  !renamingHere && "cursor-grab active:cursor-grabbing",
+                  // A split group sits on a shared track so it reads as one unit.
+                  isSplit && "bg-zinc-800/60 px-1",
+                  dragOverIndex === gi && dragIndex !== null && dragIndex !== gi && "ring-1 ring-sky-500",
+                  dragIndex === gi && "opacity-60"
+                )}
+              >
+                {members.map((t) => renderChip(t))}
+              </div>
+            );
+          })}
+        </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <div className="ml-2 flex shrink-0 items-center gap-0.5">
+          <button
+            onClick={() => focused && openTerminalSearch(focused)}
+            disabled={!focused || !started[focused]}
+            title="Find in terminal (Ctrl+F)"
+            className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40"
+          >
+            <VscSearch size={14} />
+          </button>
+          <button
+            onClick={() => focused && clearTerminal(focused)}
+            disabled={!focused || !started[focused]}
+            title="Clear terminal buffer"
+            className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40"
+          >
+            <VscClearAll size={14} />
+          </button>
           <button
             onClick={() => focused && runRestart(focused)}
             disabled={!focused}

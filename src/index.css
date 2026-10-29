@@ -23,6 +23,71 @@ body {
   overflow: hidden;
 }
 
+/* Subtle default scrollbars for general UI panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.4);
+}
+
+/* Utility to hide scrollbars completely while preserving scrolling */
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/*
+ * Terminal (xterm) scrollbar fixes:
+ * Remove both horizontal and vertical scrollbars so the terminal is clean,
+ * while keeping vertical scrolling functional via wheel, trackpad, and keyboard.
+ */
+.xterm .xterm-viewport {
+  overflow-x: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.xterm,
+.xterm * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.xterm::-webkit-scrollbar,
+.xterm *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar {
+  display: none !important;
+}
+
 #root {
   margin: 0;
   height: 100vh;

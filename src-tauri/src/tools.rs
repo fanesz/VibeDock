@@ -123,3 +123,19 @@ pub fn reveal_in_explorer(path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[tauri::command]
+pub fn resolve_project_folder(path: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Path does not exist".into());
+    }
+    let dir = if p.is_dir() {
+        p.to_path_buf()
+    } else if let Some(parent) = p.parent() {
+        parent.to_path_buf()
+    } else {
+        return Err("No parent directory found".into());
+    };
+    Ok(dir.to_string_lossy().to_string())
+}
